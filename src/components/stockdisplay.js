@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import config from '../config';
 import "./stocktable.css";
 
 const StockTable = () => {
@@ -138,7 +139,8 @@ const StockTable = () => {
     const fetchStocks = async () => {
       try {
         setLoading(true);
-        const response = await axios.get('http://localhost:5000/api/nifty50');
+        console.log('Fetching from:', `${config.apiBaseUrl}/api/nifty50`); // Debug log
+        const response = await axios.get(`${config.apiBaseUrl}/api/nifty50`);
         console.log('API Response:', response.data);
 
         if (!response.data) {
@@ -172,7 +174,7 @@ const StockTable = () => {
 
             try {
               const detailsResponse = await axios.get(
-                `http://localhost:5000/api/stock/${encodeURIComponent(stock.symbol)}`
+                `${config.apiBaseUrl}/api/stock/${encodeURIComponent(stock.symbol)}`
               );
               
               // Basic data if detailed fetch fails
