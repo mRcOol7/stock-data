@@ -18,6 +18,7 @@ const StockTable = () => {
   });
   const [marketStatus, setMarketStatus] = useState({
     status: null,
+    message: "",
     topGainers: [],
     topLosers: [],
     totalVolume: 0,
@@ -240,8 +241,32 @@ const StockTable = () => {
         const sortedByLoss = [...validStocks].sort((a, b) => a.pChange - b.pChange);
         const totalVolume = validStocks.reduce((sum, stock) => sum + stock.volume, 0);
 
+        // Check market status based on time and day
+        const now = new Date();
+        const day = now.getDay();
+        const hours = now.getHours();
+        const minutes = now.getMinutes();
+        const currentTime = hours * 60 + minutes;
+        const marketOpenTime = 9 * 60 + 15;  // 9:15 AM
+        const marketCloseTime = 15 * 60 + 30; // 3:30 PM
+
+        let marketStatus = "Closed";
+        let statusMessage = "";
+
+        if (day === 0 || day === 6) {
+          statusMessage = "Market is closed - Weekend";
+        } else if (currentTime < marketOpenTime) {
+          statusMessage = "Market is closed - Opens at 9:15 AM IST";
+        } else if (currentTime > marketCloseTime) {
+          statusMessage = "Market is closed - Closed at 3:30 PM IST";
+        } else {
+          marketStatus = "Open";
+          statusMessage = "Market is open";
+        }
+
         setMarketStatus({
-          status: "Open", // You can add logic to determine market status
+          status: marketStatus,
+          message: statusMessage,
           topGainers: sortedByGain.slice(0, 5),
           topLosers: sortedByLoss.slice(0, 5),
           totalVolume: totalVolume,
@@ -302,8 +327,8 @@ const StockTable = () => {
               <div className="index-title">
                 <h2>{niftyData.index}</h2>
                 <span className="market-status">
-                  <span className="status-dot"></span>
-                  Market {marketStatus.status}
+                  <span className={`status-dot ${marketStatus.status === 'Open' ? 'open' : 'closed'}`}></span>
+                  {marketStatus.message}
                 </span>
               </div>
               <div className="time-info">
@@ -320,10 +345,7 @@ const StockTable = () => {
                     <span className="change-percent">({formatPChange(niftyData.percentChange)})</span>
                   </div>
                 </div>
-                
-                <div className="chart-placeholder">
-                  {/* Add a small sparkline chart here if you have chart data */}
-                </div>
+              
               </div>
 
               <div className="metrics-grid">

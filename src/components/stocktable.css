@@ -104,20 +104,25 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 1rem;
-  opacity: 0.9;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
 }
 
 .status-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot.open {
   background-color: var(--success-color);
-  animation: pulse 2s infinite;
+  box-shadow: 0 0 8px var(--success-color);
 }
 
 .status-dot.closed {
   background-color: var(--danger-color);
+  box-shadow: 0 0 8px var(--danger-color);
 }
 
 .time-info {
