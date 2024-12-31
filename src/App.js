@@ -1,4 +1,4 @@
-import StockTable from "./components/stocktable";
+import StockTable from "./components/stockdisplay";
 import "./App.css";
 
 function App() {

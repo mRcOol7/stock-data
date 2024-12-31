@@ -1,70 +1,106 @@
-# Getting Started with Create React App
+# Trading Dashboard
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A modern React-based trading dashboard application that provides real-time stock market data visualization and analysis tools.
 
-## Available Scripts
+## Features
 
-In the project directory, you can run:
+- Real-time stock market data visualization
+- Interactive stock table with sorting and filtering
+- PDF export functionality for reports
+- Server-side proxy for secure API interactions
+- Responsive design for desktop and mobile devices
 
-### `npm start`
+## Prerequisites
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+Before you begin, ensure you have the following installed:
+- Node.js (v14.0.0 or higher)
+- npm (v6.0.0 or higher)
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Installation
 
-### `npm test`
+1. Clone the repository:
+```bash
+git clone [your-repository-url]
+cd trading
+```
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+2. Install frontend dependencies:
+```bash
+npm install
+```
 
-### `npm run build`
+3. Install server dependencies:
+```bash
+cd server
+npm install
+```
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## Configuration
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+1. Frontend configuration is managed through environment variables
+2. Server configuration can be modified in `server/server.js`
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+## Running the Application
 
-### `npm run eject`
+1. Start the backend server:
+```bash
+cd server
+npm start
+```
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+2. In a new terminal, start the frontend:
+```bash
+cd ..
+npm start
+```
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+The application will be available at `http://localhost:3000`
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+## Built With
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+### Frontend
+- React.js - v19.0.0
+- Axios - For API requests
+- styled-components - For component styling
+- PDF libraries (jspdf, pdfmake) - For report generation
 
-## Learn More
+### Backend
+- Express.js - Backend framework
+- Axios - For proxying API requests
+- CORS - For handling cross-origin requests
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+## Project Structure
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+```
+trading/
+├── src/                    # Frontend source files
+│   ├── components/         # React components
+│   ├── App.js             # Main App component
+│   └── ...
+├── server/                 # Backend server
+│   ├── server.js          # Express server setup
+│   └── package.json       # Server dependencies
+├── public/                 # Static files
+└── package.json           # Frontend dependencies
+```
 
-### Code Splitting
+## Contributing
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
-### Analyzing the Bundle Size
+## License
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+This project is licensed under the MIT License - see the LICENSE file for details
 
-### Making a Progressive Web App
+## Authors
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+- Your Name - Initial work
 
-### Advanced Configuration
+## Acknowledgments
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+- NSE for providing market data
+- React community for excellent tools and libraries

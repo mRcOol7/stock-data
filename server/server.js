@@ -113,6 +113,11 @@ app.get('/api/stock/:symbol', async (req, res) => {
     }
 });
 
+// Test endpoint for Vercel deployment
+app.get('/', (req, res) => {
+    res.json({ message: 'Hello from Vercel Server!' });
+});
+
 app.listen(PORT, () => {
     console.log(`Proxy server running on port ${PORT}`);
 });
