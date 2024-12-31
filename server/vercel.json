@@ -3,7 +3,11 @@
   "builds": [
     {
       "src": "server.js",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30,
+        "memory": 1024
+      }
     }
   ],
   "routes": [
@@ -21,5 +25,13 @@
       "src": "/(.*)",
       "dest": "/server.js"
     }
-  ]
+  ],
+  "env": {
+    "NODE_ENV": "production",
+    "PORT": "5000",
+    "NSE_API_BASE_URL": "https://www.nseindia.com",
+    "REQUEST_TIMEOUT": "30000",
+    "COOKIE_EXPIRY": "300000",
+    "CORS_ORIGIN": "*"
+  }
 }
