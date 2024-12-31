@@ -1,9 +1,7 @@
-const isDevelopment = process.env.NODE_ENV === 'development';
-
 const config = {
-  apiBaseUrl: isDevelopment 
-    ? 'http://localhost:5000'
-    : (process.env.REACT_APP_API_URL || 'https://server-chi-eosin.vercel.app')
+  apiBaseUrl: process.env.NODE_ENV === 'production'
+    ? 'https://server-chi-eosin.vercel.app'
+    : 'http://localhost:5000'
 };
 
 console.log('Environment:', process.env.NODE_ENV);

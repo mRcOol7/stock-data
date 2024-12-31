@@ -10,9 +10,15 @@ const axios = require('axios');
 const cors = require('cors');
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
-app.use(cors());
+// Configure CORS
+app.use(cors({
+    origin: ['http://localhost:3000', 'https://stock-data-eight.vercel.app'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
+}));
 
 // Store cookies
 let cookies = '';
