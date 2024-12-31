@@ -2,7 +2,10 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import "./stocktable.css";
 
-const API_BASE_URL = "https://server-chi-eosin.vercel.app";
+// API URL configuration
+const API_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://server-chi-eosin.vercel.app'
+  : 'http://localhost:5000';
 
 const StockTable = () => {
   const [stocks, setStocks] = useState([]);
@@ -137,10 +140,10 @@ const StockTable = () => {
   };
 
   useEffect(() => {
-    const fetchStocks = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
-        const response = await axios.get(`${API_BASE_URL}/api/nifty50`);
+        const response = await axios.get(`${API_URL}/api/nifty50`);
         console.log('API Response:', response.data);
 
         if (!response.data) {
@@ -174,7 +177,7 @@ const StockTable = () => {
 
             try {
               const detailsResponse = await axios.get(
-                `${API_BASE_URL}/api/stock/${encodeURIComponent(stock.symbol)}`
+                `${API_URL}/api/stock/${encodeURIComponent(stock.symbol)}`
               );
               
               // Basic data if detailed fetch fails
@@ -255,8 +258,8 @@ const StockTable = () => {
       }
     };
 
-    fetchStocks();
-    const interval = setInterval(fetchStocks, 60000); // Update every minute
+    fetchData();
+    const interval = setInterval(fetchData, 120000); // Update every 2 minutes
 
     return () => clearInterval(interval);
   }, []);
