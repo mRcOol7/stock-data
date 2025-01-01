@@ -138,11 +138,44 @@ app.get('/api/stock/:symbol', async (req, res) => {
     }
 });
 
+// Proxy endpoint for historical data
+app.get('/api/historical/:symbol', async (req, res) => {
+    try {
+        const symbol = req.params.symbol;
+        const response = await axios.get(
+            `https://www.nseindia.com/api/historical/cm/equity?symbol=${encodeURIComponent(symbol)}`,
+            {
+                headers: {
+                    ...headers,
+                    'Cookie': cookies.join('; ')
+                }
+            }
+        );
+        
+        // Transform the data for candlestick chart
+        const historicalData = response.data.data.map(item => ({
+            date: item.CH_TIMESTAMP,
+            open: parseFloat(item.CH_OPENING_PRICE),
+            high: parseFloat(item.CH_TRADE_HIGH_PRICE),
+            low: parseFloat(item.CH_TRADE_LOW_PRICE),
+            close: parseFloat(item.CH_CLOSING_PRICE)
+        }));
+        
+        res.json(historicalData);
+    } catch (error) {
+        console.error('Error fetching historical data:', error);
+        if (error.response && error.response.status === 403) {
+            cookies = '';
+        }
+        res.status(500).json({ error: 'Failed to fetch historical data from NSE' });
+    }
+});
+
 // Test endpoint for Vercel deployment
 app.get('/', (req, res) => {
     res.json({ message: 'Hello from Vercel Server!' });
 });
 
 app.listen(PORT, () => {
-    console.log(`Proxy server running on port ${PORT}`);
+    console.log(`Server is running on port ${PORT}`);
 });

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import config from '../config';
 import "./stocktable.css";
+import ReactApexChart from "react-apexcharts";
 
 const StockTable = () => {
   const [stocks, setStocks] = useState([]);
@@ -34,6 +35,27 @@ const StockTable = () => {
     low: 0,
     previousClose: 0,
     lastUpdated: null
+  });
+  const [selectedStock, setSelectedStock] = useState(null);
+  const [selectedStockDetails, setSelectedStockDetails] = useState(null);
+  const [chartLoading, setChartLoading] = useState(false);
+  const [candleData, setCandleData] = useState([]);
+  const [chartOptions, setChartOptions] = useState({
+    chart: {
+      type: 'candlestick',
+      height: 500,
+      zoom: {
+        enabled: true
+      }
+    },
+    xaxis: {
+      type: 'datetime'
+    },
+    yaxis: {
+      tooltip: {
+        enabled: true
+      }
+    }
   });
 
   const formatChange = (change) => {
@@ -286,6 +308,76 @@ const StockTable = () => {
     return () => clearInterval(interval);
   }, []);
 
+  const handleRowClick = async (stock) => {
+    setSelectedStock(stock.symbol);
+    setChartLoading(true);
+    setSelectedStockDetails(stock);
+    
+    try {
+      const response = await axios.get(`${config.apiBaseUrl}/api/historical/${stock.symbol}`);
+      const historicalData = response.data
+        .sort((a, b) => new Date(a.date) - new Date(b.date))
+        .map(item => ({
+          x: new Date(item.date).getTime(),
+          y: [
+            parseFloat(item.open),
+            parseFloat(item.high),
+            parseFloat(item.low),
+            parseFloat(item.close)
+          ]
+        }));
+      
+      setCandleData([{
+        data: historicalData
+      }]);
+
+      setChartOptions({
+        chart: {
+          type: 'candlestick',
+          height: 500,
+          zoom: {
+            enabled: true
+          }
+        },
+        title: {
+          text: `${stock.symbol} Price History`,
+          align: 'left'
+        },
+        xaxis: {
+          type: 'datetime',
+          labels: {
+            datetimeFormatter: {
+              year: 'yyyy',
+              month: 'MMM \'yy',
+              day: 'dd MMM'
+            }
+          }
+        },
+        yaxis: {
+          tooltip: {
+            enabled: true
+          },
+          labels: {
+            formatter: (value) => `₹${value.toFixed(2)}`
+          }
+        },
+        plotOptions: {
+          candlestick: {
+            colors: {
+              upward: '#26A69A',
+              downward: '#EF5350'
+            }
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching historical data:', error);
+      setCandleData([]);
+    } finally {
+      setChartLoading(false);
+    }
+  };
+
   // Pagination logic for filtered stocks
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
@@ -318,7 +410,7 @@ const StockTable = () => {
         </div>
       </div>
 
-      {/* Main Market Overview */}
+      {/* Market Overview and Stock Table */}
       <div className="market-overview">
         {/* Nifty 50 Card */}
         <div className="nifty-container">
@@ -427,17 +519,13 @@ const StockTable = () => {
                   <span className="volume-value">{(marketStatus?.totalVolume / 1000000).toFixed(2)}M</span>
                   <span className="volume-label">shares traded</span>
                 </div>
-                <div className="volume-chart">
-                  {/* Add a small volume chart here if you have chart data */}
-                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Search and Filter Section */}
-      <div className="filters-section">
+      <div className="filters-container">
         <div className="search-container">
           <input
             type="text"
@@ -527,7 +615,7 @@ const StockTable = () => {
         </thead>
         <tbody>
           {currentItems.map((stock, index) => (
-            <tr key={index}>
+            <tr key={index} onClick={() => handleRowClick(stock)} style={{ cursor: 'pointer' }}>
               <td>{stock.symbol}</td>
               <td>{stock.open}</td>
               <td>{stock.high}</td>
@@ -555,6 +643,78 @@ const StockTable = () => {
             {i + 1}
           </button>
         ))}
+      </div>
+
+      {/* Chart Section at Bottom */}
+      <div className="chart-section">
+        {!selectedStock ? (
+          <div className="chart-guide">
+            <i className="fas fa-chart-line"></i>
+            <p>Click on any stock row above to view detailed price history chart</p>
+          </div>
+        ) : (
+          <div className="selected-stock-info">
+            <div className="stock-header">
+              <div className="stock-title">
+                <h2>{selectedStock}</h2>
+                {selectedStockDetails && (
+                  <div className="stock-price-info">
+                    <span className="current-price">₹{selectedStockDetails.lastPrice}</span>
+                    <span className={`price-change ${getValueClass(selectedStockDetails.pChange)}`}>
+                      {formatChange(selectedStockDetails.change)} ({formatPChange(selectedStockDetails.pChange)})
+                    </span>
+                  </div>
+                )}
+              </div>
+              <div className="chart-stats">
+                {selectedStockDetails && (
+                  <>
+                    <div className="stat-item">
+                      <span className="stat-label">Open</span>
+                      <span className="stat-value">₹{selectedStockDetails.open}</span>
+                    </div>
+                    <div className="stat-item">
+                      <span className="stat-label">High</span>
+                      <span className="stat-value">₹{selectedStockDetails.high}</span>
+                    </div>
+                    <div className="stat-item">
+                      <span className="stat-label">Low</span>
+                      <span className="stat-value">₹{selectedStockDetails.low}</span>
+                    </div>
+                    <div className="stat-item">
+                      <span className="stat-label">Prev Close</span>
+                      <span className="stat-value">₹{selectedStockDetails.preClose}</span>
+                    </div>
+                    <div className="stat-item">
+                      <span className="stat-label">Volume</span>
+                      <span className="stat-value">{(selectedStockDetails.volume || 0).toLocaleString()}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+            
+            <div className="chart-container">
+              {chartLoading ? (
+                <div className="chart-loading">
+                  <div className="loading-spinner"></div>
+                  <p>Loading chart data...</p>
+                </div>
+              ) : candleData.length > 0 && candleData[0].data && candleData[0].data.length > 0 ? (
+                <ReactApexChart
+                  options={chartOptions}
+                  series={candleData}
+                  type="candlestick"
+                  height={500}
+                />
+              ) : (
+                <div className="no-data-message">
+                  <p>No historical data available for this stock</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

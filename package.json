@@ -4,6 +4,7 @@
   "private": true,
   "dependencies": {
     "@react-pdf/renderer": "^4.1.6",
+    "apexcharts": "^4.3.0",
     "axios": "^1.7.9",
     "cra-template": "1.2.0",
     "date-fns": "^4.1.0",
@@ -11,6 +12,7 @@
     "jspdf-autotable": "^3.8.4",
     "pdfmake": "^0.3.0-beta.14",
     "react": "^19.0.0",
+    "react-apexcharts": "^1.7.0",
     "react-dom": "^19.0.0",
     "react-scripts": "5.0.1",
     "styled-components": "^6.1.13",
