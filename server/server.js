@@ -375,6 +375,7 @@ app.get('/api/indices', async (req, res) => {
     }
 });
 
+//hello 
 // Test endpoint for Vercel deployment
 app.get('/', (req, res) => {
     res.json({ message: 'Hello from Vercel Server!' });
