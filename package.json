@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "@groww-tech/react-charts": "^0.1.8",
     "@react-pdf/renderer": "^4.1.6",
     "apexcharts": "^4.3.0",
     "axios": "^1.7.9",
