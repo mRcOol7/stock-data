@@ -354,13 +354,6 @@ const StockTable = () => {
     }
   }, [niftyStocks, bankNiftyStocks]);
 
-  const handleFilterChange = (filterName, value) => {
-    setFilters(prev => ({
-      ...prev,
-      [filterName]: value
-    }));
-    setCurrentPage(1); // Reset to first page when filter changes
-  };
 
   const handleSort = (column) => {
     setFilters(prevFilters => ({
@@ -370,10 +363,6 @@ const StockTable = () => {
     }));
   };
 
-  const getSortIcon = (column) => {
-    if (filters.sortColumn !== column) return '↕️';
-    return filters.sortDirection === 'asc' ? '↑' : '↓';
-  };
 
   const fetchData = async () => {
     try {
