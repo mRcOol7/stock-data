@@ -465,6 +465,9 @@
 
   .volume-card {
     max-width: 600px;
+    margin: 12px auto;
+    padding: 12px;
+
   }
 }
 
@@ -472,6 +475,9 @@
   .volume-card {
     margin: 12px;
     padding: 12px;
+    max-width: 100%;
+    box-sizing: border-box;
+    
   }
 
   .volume-stats,

@@ -1,6 +1,6 @@
 const config = {
   apiBaseUrl: process.env.NODE_ENV === 'production'
-    ? 'https://server-chi-eosin.vercel.app'
+    ? 'https://stock-backend-8nn9.onrender.com'
     : 'http://localhost:5000'
 };
 
