@@ -2,7 +2,7 @@
 try {
     require('dotenv').config();
 } catch (error) {
-    console.log('No .env file found, using environment variables from the system');
+    // Silently continue if no .env file
 }
 
 const express = require('express');
@@ -12,24 +12,35 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Cache configuration
+const CACHE_DURATION = 5000; // 5 seconds cache
+let dataCache = {
+    nifty50: { data: null, timestamp: 0 },
+    bankNifty: { data: null, timestamp: 0 },
+    cookies: { value: null, timestamp: 0 }
+};
+
 // Configure CORS with environment variables
-const allowedOrigins = process.env.ALLOWED_ORIGINS 
-    ? process.env.ALLOWED_ORIGINS.split(',') 
-    : ['http://localhost:3000', 'https://stock-data-eight.vercel.app'];
+const allowedOrigins = [
+    'http://localhost:3000',
+    'https://stock-data-eight.vercel.app'
+];
 
 app.use(cors({
     origin: function (origin, callback) {
         // allow requests with no origin (like mobile apps or curl requests)
         if (!origin) return callback(null, true);
         
-        if (allowedOrigins.indexOf(origin) === -1) {
-            return callback(null, true);
+        if (allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
         }
-        return callback(null, true);
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true
+    credentials: true,
+    maxAge: 86400 // CORS preflight cache for 24 hours
 }));
 
 // NSE API endpoints
@@ -43,57 +54,74 @@ let HEADERS = {
     'Accept-Encoding': 'gzip, deflate, br'
 };
 
-// Cookie management with retry mechanism
-const getCookies = async (retries = 3) => {
+// Axios instance with optimized timeout
+const axiosInstance = axios.create({
+    timeout: 15000, // 15 seconds timeout
+    headers: HEADERS
+});
+
+// Cookie management with caching
+const getCookies = async (retries = 2) => {
+    const now = Date.now();
+    if (dataCache.cookies.value && (now - dataCache.cookies.timestamp) < CACHE_DURATION) {
+        HEADERS.Cookie = dataCache.cookies.value;
+        return true;
+    }
+
     for (let i = 0; i < retries; i++) {
         try {
-            console.log('Fetching new cookies...');
-            const response = await axios.get('https://www.nseindia.com/', {
-                headers: HEADERS
-            });
-            
+            const response = await axiosInstance.get('https://www.nseindia.com/');
             const cookies = response.headers['set-cookie'];
+            
             if (cookies) {
                 const cookieString = cookies.join('; ');
                 HEADERS.Cookie = cookieString;
-                console.log('Cookies updated successfully');
+                dataCache.cookies = { value: cookieString, timestamp: now };
                 return true;
             }
         } catch (error) {
-            console.error(`Cookie fetch attempt ${i + 1} failed:`, error.message);
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+            if (i === retries - 1) throw error;
+            await new Promise(resolve => setTimeout(resolve, 500 * (i + 1)));
         }
     }
     return false;
 };
 
-// Utility function to make NSE requests with retries
-const makeNSERequest = async (url, maxRetries = 3) => {
+// Optimized NSE request function
+const makeNSERequest = async (url, cacheKey, maxRetries = 2) => {
+    const now = Date.now();
+    if (dataCache[cacheKey]?.data && (now - dataCache[cacheKey].timestamp) < CACHE_DURATION) {
+        return dataCache[cacheKey].data;
+    }
+
     for (let i = 0; i < maxRetries; i++) {
         try {
-            // Get fresh cookies before each attempt
-            await getCookies();
-            
-            // Add a small delay to prevent rate limiting
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            const response = await axios.get(url, {
-                headers: HEADERS,
-                withCredentials: true
-            });
-            
+            const response = await axiosInstance.get(url, { headers: HEADERS });
             if (response.data) {
+                dataCache[cacheKey] = { data: response.data, timestamp: now };
                 return response.data;
             }
         } catch (error) {
-            console.error(`Attempt ${i + 1} failed for ${url}:`, error.message);
-            if (i < maxRetries - 1) {
-                await new Promise(resolve => setTimeout(resolve, 1000)); // Wait before retry
-            }
+            if (i === maxRetries - 1) throw error;
+            await new Promise(resolve => setTimeout(resolve, 500 * (i + 1)));
+            await getCookies();
         }
     }
-    console.error(`All attempts failed for ${url}`);
-    return null;
+    throw new Error('Failed to fetch data after retries');
+};
+
+// Utility function to make NSE requests with retries
+const makeNSERequestOld = async (url, maxRetries = 3) => {
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            const response = await axiosInstance.get(url, { headers: HEADERS });
+            return response.data;
+        } catch (error) {
+            if (i === maxRetries - 1) throw error;
+            await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+            await getCookies();
+        }
+    }
 };
 
 // Process stock data
@@ -157,10 +185,9 @@ const getMarketStatus = () => {
 // Proxy endpoint for NIFTY 50 data
 app.get('/api/nifty50', async (req, res) => {
     try {
-        const data = await makeNSERequest('https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%2050');
+        const data = await makeNSERequest('https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%2050', 'nifty50');
         res.json(data);
     } catch (error) {
-        console.error('Error fetching data:', error.message);
         res.status(500).json({ error: 'Failed to fetch data from NSE' });
     }
 });
@@ -168,12 +195,10 @@ app.get('/api/nifty50', async (req, res) => {
 // API endpoints
 app.get('/api/nifty', async (req, res) => {
     try {
-        const data = await makeNSERequest('https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20500');
+        const data = await makeNSERequest('https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20500', 'nifty');
         const processedData = data ? processStockData(data) : [];
-        console.log(`Successfully fetched ${processedData.length} NIFTY stocks`);
         res.json(processedData);
     } catch (error) {
-        console.error('Error fetching NIFTY data:', error.message);
         res.json([]);
     }
 });
@@ -183,12 +208,10 @@ app.get('/api/banknifty', async (req, res) => {
         // Get fresh cookies before fetching BANK NIFTY data
         await getCookies();
         
-        const data = await makeNSERequest('https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20BANK');
+        const data = await makeNSERequest('https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20BANK', 'bankNifty');
         const processedData = data ? processStockData(data) : [];
-        console.log(`Successfully fetched ${processedData.length} BANKNIFTY stocks`);
         res.json(processedData);
     } catch (error) {
-        console.error('Error fetching BANKNIFTY data:', error.message);
         res.json([]);
     }
 });
@@ -197,7 +220,7 @@ app.get('/api/banknifty', async (req, res) => {
 app.get('/api/banknifty-stocks', async (req, res) => {
     try {
         // Fetch Bank Nifty constituent stocks
-        const bankNiftyResponse = await makeNSERequest('https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20BANK');
+        const bankNiftyResponse = await makeNSERequest('https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20BANK', 'bankNifty');
         
         const bankNiftyStocks = bankNiftyResponse.data.map(stock => ({
             symbol: stock.symbol,
@@ -214,7 +237,6 @@ app.get('/api/banknifty-stocks', async (req, res) => {
 
         res.json(bankNiftyStocks);
     } catch (error) {
-        console.error('Error fetching Bank Nifty stocks:', error.message);
         res.status(500).json({ error: 'Failed to fetch Bank Nifty stocks' });
     }
 });
@@ -223,10 +245,10 @@ app.get('/api/banknifty-stocks', async (req, res) => {
 app.get('/api/stock/:symbol', async (req, res) => {
     try {
         // First get the quote data
-        const quoteResponse = await makeNSERequest(`https://www.nseindia.com/api/quote-equity?symbol=${encodeURIComponent(req.params.symbol)}`);
+        const quoteResponse = await makeNSERequestOld(`https://www.nseindia.com/api/quote-equity?symbol=${encodeURIComponent(req.params.symbol)}`);
         
         // Then get the trade info data which has more detailed volume information
-        const tradeInfoResponse = await makeNSERequest(`https://www.nseindia.com/api/quote-equity?symbol=${encodeURIComponent(req.params.symbol)}&section=trade_info`);
+        const tradeInfoResponse = await makeNSERequestOld(`https://www.nseindia.com/api/quote-equity?symbol=${encodeURIComponent(req.params.symbol)}&section=trade_info`);
         
         // Combine the data
         const combinedData = {
@@ -236,7 +258,6 @@ app.get('/api/stock/:symbol', async (req, res) => {
 
         res.json(combinedData);
     } catch (error) {
-        console.error('Error fetching stock details:', error.message);
         res.status(500).json({ error: 'Failed to fetch stock details' });
     }
 });
@@ -245,7 +266,7 @@ app.get('/api/stock/:symbol', async (req, res) => {
 app.get('/api/historical/:symbol', async (req, res) => {
     try {
         const symbol = req.params.symbol;
-        const response = await makeNSERequest(`https://www.nseindia.com/api/historical/cm/equity?symbol=${encodeURIComponent(symbol)}`);
+        const response = await makeNSERequestOld(`https://www.nseindia.com/api/historical/cm/equity?symbol=${encodeURIComponent(symbol)}`);
         
         // Transform the data for candlestick chart
         const historicalData = response.data.map(item => ({
@@ -258,35 +279,27 @@ app.get('/api/historical/:symbol', async (req, res) => {
         
         res.json(historicalData);
     } catch (error) {
-        console.error('Error fetching historical data:', error.message);
         res.status(500).json({ error: 'Failed to fetch historical data from NSE' });
     }
 });
 
 // Get index data
 app.get('/api/indices', async (req, res) => {
+    const startTime = Date.now();
     try {
-        console.log('Fetching indices data...');
-        
-        // Get market status
         const marketStatus = getMarketStatus();
-        
-        // Get fresh cookies
         await getCookies();
         
-        // Fetch NIFTY 50 data
-        const nifty50Data = await makeNSERequest('https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%2050');
-        console.log('NIFTY 50 data fetched');
-
-        // Get fresh cookies again before BANK NIFTY request
-        await getCookies();
-        
-        // Add delay before BANK NIFTY request
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // Fetch BANK NIFTY data
-        const bankNiftyData = await makeNSERequest('https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20BANK');
-        console.log('BANK NIFTY data fetched');
+        const [nifty50Data, bankNiftyData] = await Promise.all([
+            makeNSERequest(
+                'https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%2050',
+                'nifty50'
+            ).catch(() => ({ data: [null] })),
+            makeNSERequest(
+                'https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20BANK',
+                'bankNifty'
+            ).catch(() => ({ data: [null] }))
+        ]);
 
         const indices = {
             marketStatus,
@@ -319,63 +332,23 @@ app.get('/api/indices', async (req, res) => {
                 totalTradedVolume: 0,
                 totalTradedValue: 0,
                 lastUpdateTime: new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })
+            },
+            performance: {
+                fetchTime: `${Date.now() - startTime}ms`,
+                cached: !!(dataCache.nifty50.data && dataCache.bankNifty.data)
             }
         };
 
-        console.log('Indices data processed:', {
-            marketStatus,
-            nifty50: {
-                lastPrice: indices.nifty50.lastPrice,
-                change: indices.nifty50.change,
-                pChange: indices.nifty50.pChange
-            },
-            bankNifty: {
-                lastPrice: indices.bankNifty.lastPrice,
-                change: indices.bankNifty.change,
-                pChange: indices.bankNifty.pChange
-            }
-        });
-
         res.json(indices);
     } catch (error) {
-        console.error('Error in /api/indices:', error.message);
-        res.json({
-            marketStatus: getMarketStatus(),
-            nifty50: {
-                symbol: 'NIFTY 50',
-                lastPrice: 0,
-                change: 0,
-                pChange: 0,
-                open: 0,
-                dayHigh: 0,
-                dayLow: 0,
-                previousClose: 0,
-                yearHigh: 0,
-                yearLow: 0,
-                totalTradedVolume: 0,
-                totalTradedValue: 0,
-                lastUpdateTime: new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })
-            },
-            bankNifty: {
-                symbol: 'NIFTY BANK',
-                lastPrice: 0,
-                change: 0,
-                pChange: 0,
-                open: 0,
-                dayHigh: 0,
-                dayLow: 0,
-                previousClose: 0,
-                yearHigh: 0,
-                yearLow: 0,
-                totalTradedVolume: 0,
-                totalTradedValue: 0,
-                lastUpdateTime: new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })
-            }
+        res.status(500).json({
+            error: 'Failed to fetch indices data',
+            message: error.message,
+            timestamp: new Date().toISOString()
         });
     }
 });
 
-//hello 
 // Test endpoint for Vercel deployment
 app.get('/', (req, res) => {
     res.json({ message: 'Hello from Vercel Server!' });
