@@ -19,8 +19,6 @@
 6. [🔒 Security](#-security)  
 7. [🎨 Theme Customization](#-theme-customization)  
 8. [📱 Responsive Design](#-responsive-design)  
-9. [🤝 Contributing](#-contributing)  
-10. [📜 License](#-license)  
 
 ---
 
