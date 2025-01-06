@@ -40,6 +40,8 @@ const StockTable = () => {
     high: 0,
     low: 0,
     previousClose: 0,
+    upperCircuit: 0,
+    lowerCircuit: 0,
     lastUpdated: new Date().toLocaleString()
   });
   const [bankNiftyData, setBankNiftyData] = useState({
@@ -432,7 +434,8 @@ const StockTable = () => {
       yearLow: 0,
       totalTradedVolume: 0,
       totalTradedValue: 0,
-      lastUpdateTime: ''
+      lastUpdateTime: '',
+      previousDayVolume: 0
     },
     bankNifty: {
       symbol: 'NIFTY BANK',
@@ -447,7 +450,8 @@ const StockTable = () => {
       yearLow: 0,
       totalTradedVolume: 0,
       totalTradedValue: 0,
-      lastUpdateTime: ''
+      lastUpdateTime: '',
+      previousDayVolume: 0
     },
     marketStatus: {
       status: 'Open',
@@ -886,316 +890,138 @@ const StockTable = () => {
     );
   };
 
-  // Render loading state
-  if (loading) {
-    return <div className="loading">Loading...</div>;
-  }
+ // Render loading state
+if (loading) {
+  return <div className="loading">Loading...</div>;
+}
 
-  if (!stocks || stocks.length === 0) {
-    return <div>No stocks data available</div>;
-  }
+if (!stocks || stocks.length === 0) {
+  return <div>No stocks data available</div>;
+}
 
-  const formatLargeNumber = (number) => {
-    if (!number) return '0';
-    
-    // Convert to absolute number for calculation
-    const absNum = Math.abs(number);
-    
-    // Trillions
-    if (absNum >= 1e12) {
-      return `${(number / 1e12).toFixed(2)}T`;
-    }
-    // Billions
-    if (absNum >= 1e9) {
-      return `${(number / 1e9).toFixed(2)}B`;
-    }
-    // Millions
-    if (absNum >= 1e6) {
-      return `${(number / 1e6).toFixed(2)}M`;
-    }
-    // Thousands
-    if (absNum >= 1e3) {
-      return `${(number / 1e3).toFixed(2)}K`;
-    }
-    
-    return number.toFixed(2);
-  };
+// Format large numbers with appropriate suffixes (K, M, B, T)
+const formatLargeNumber = (number) => {
+  if (!number) return '0';
 
-  const VolumeCard = ({ indices }) => {
-    // Check if we have valid data
-    const hasValidData = indices && 
-      indices.nifty50 && 
-      indices.bankNifty && 
-      (indices.nifty50.totalTradedVolume || indices.bankNifty.totalTradedVolume);
+  const absNum = Math.abs(number);
+  const suffixes = [
+    { threshold: 1e12, suffix: 'T' },
+    { threshold: 1e9, suffix: 'B' },
+    { threshold: 1e6, suffix: 'M' },
+    { threshold: 1e3, suffix: 'K' },
+  ];
 
-    const totalVolume = hasValidData ? 
-      (indices.nifty50.totalTradedVolume || 0) + (indices.bankNifty.totalTradedVolume || 0) : 0;
-    const totalValue = hasValidData ? 
-      (indices.nifty50.totalTradedValue || 0) + (indices.bankNifty.totalTradedValue || 0) : 0;
-    
-    const getVolumeChangeClass = () => {
-      if (!hasValidData) return '';
-      const prevDayVolume = (indices.nifty50.previousDayVolume || 0) + (indices.bankNifty.previousDayVolume || 0);
-      return totalVolume > prevDayVolume ? 'positive' : 'negative';
-    };
+  const { suffix, threshold } = suffixes.find(({ threshold }) => absNum >= threshold) || {};
+  return suffix ? `${(number / threshold).toFixed(2)}${suffix}` : number.toFixed(2);
+};
 
-    const calculateVolumeChange = () => {
-      if (!hasValidData) return 0;
-      const prevDayVolume = (indices.nifty50.previousDayVolume || 0) + (indices.bankNifty.previousDayVolume || 0);
-      if (!prevDayVolume) return 0;
-      return ((totalVolume - prevDayVolume) / prevDayVolume) * 100;
-    };
+// Format value in Crores (Cr)
+const formatCrValue = (value) => {
+  if (!value) return '0';
+  const crValue = value / 1e7; // Convert to Crores
+  return `${crValue.toLocaleString(undefined, { maximumFractionDigits: 2 })} Cr`;
+};
 
-    const volumeChange = calculateVolumeChange();
-    const niftyVolumePercent = hasValidData && totalVolume ? 
-      ((indices.nifty50.totalTradedVolume || 0) / totalVolume * 100) : 0;
-    const bankNiftyVolumePercent = hasValidData && totalVolume ? 
-      ((indices.bankNifty.totalTradedVolume || 0) / totalVolume * 100) : 0;
+// VolumeCard component to display market volume and value
+const VolumeCard = ({ indices }) => {
+  const { nifty50, bankNifty } = indices || {};
 
-    if (!indices) {
-      return (
-        <div className="volume-card loading">
-          <div className="volume-header">
-            <h3>Market Volume</h3>
-            <div className="loading-indicator">Loading...</div>
-          </div>
+  // Check if valid data exists
+  const hasValidData = nifty50 && bankNifty && 
+    (nifty50.totalTradedVolume || bankNifty.totalTradedVolume);
+
+  // Calculate total volume and value
+  const totalVolume = (nifty50?.totalTradedVolume || 0) + (bankNifty?.totalTradedVolume || 0);
+  const totalValue = (nifty50?.totalTradedValue || 0) + (bankNifty?.totalTradedValue || 0);
+
+  // Calculate volume change percentage
+  const prevDayVolume = (nifty50?.previousDayVolume || 0) + (bankNifty?.previousDayVolume || 0);
+  const volumeChange = prevDayVolume ? ((totalVolume - prevDayVolume) / prevDayVolume) * 100 : 0;
+  const volumeChangeClass = volumeChange >= 0 ? 'positive' : 'negative';
+
+  // Render index details
+  const renderIndexDetails = (index, name) => (
+    <div className={`index-volume ${!index?.totalTradedVolume ? 'error' : ''}`}>
+      <div className="index-header">
+        <span className="index-name">{name}</span>
+      </div>
+      <div className="index-stats">
+        <div className="stat">
+          <span>{formatLargeNumber(index?.totalTradedVolume || 0)}</span>
+          <small>Vol</small>
         </div>
-      );
-    }
+        <div className="stat">
+          <span>₹{formatLargeNumber(index?.totalTradedValue || 0)}</span>
+          <small>Val</small>
+        </div>
+      </div>
+    </div>
+  );
 
+  // Render loading state if no indices are provided
+  if (!indices) {
     return (
-      <div className={`volume-card ${!hasValidData ? 'error' : ''}`}>
+      <div className="volume-card loading">
         <div className="volume-header">
-          <div className="header-left">
-            <h3>Market Volume</h3>
-            <div className="volume-timestamp">
-              {hasValidData ? (
-                <>
-                  <span className="dot"></span>
-                  Live Update
-                </>
-              ) : (
-                <span className="error-text">Data Unavailable</span>
-              )}
-            </div>
-          </div>
-          {hasValidData && (
-            <div className="header-right">
-              <div className={`volume-change ${getVolumeChangeClass()}`}>
-                <span className="change-icon">{volumeChange >= 0 ? '↑' : '↓'}</span>
-                {Math.abs(volumeChange).toFixed(2)}%
-              </div>
-            </div>
-          )}
-        </div>
-        
-        <div className="volume-grid">
-          <div className="volume-stats">
-            <div className="stat-item">
-              <div className="stat-value">
-                {formatLargeNumber(totalVolume)}
-                <span className="stat-unit">shares</span>
-              </div>
-              <div className="stat-label">Total Volume</div>
-            </div>
-            
-            <div className="stat-item">
-              <div className="stat-value">
-                ₹{formatLargeNumber(totalValue)}
-                <span className="stat-unit">turnover</span>
-              </div>
-              <div className="stat-label">Total Value</div>
-            </div>
-          </div>
-          
-          <div className="volume-details">
-            <div className={`index-volume ${!indices.nifty50.totalTradedVolume ? 'error' : ''}`}>
-              <div className="index-header">
-                <span className="index-name">NIFTY 50</span>
-                {indices.nifty50.totalTradedVolume && (
-                  <span className="index-percent">
-                    {niftyVolumePercent.toFixed(1)}%
-                  </span>
-                )}
-              </div>
-              <div className="index-stats">
-                <div className="stat">
-                  <span>{formatLargeNumber(indices.nifty50.totalTradedVolume || 0)}</span>
-                  <small>Vol</small>
-                </div>
-                <div className="stat">
-                  <span>₹{formatLargeNumber(indices.nifty50.totalTradedValue || 0)}</span>
-                  <small>Val</small>
-                </div>
-              </div>
-            </div>
-            
-            <div className={`index-volume ${!indices.bankNifty.totalTradedVolume ? 'error' : ''}`}>
-              <div className="index-header">
-                <span className="index-name">BANK NIFTY</span>
-                {indices.bankNifty.totalTradedVolume && (
-                  <span className="index-percent">
-                    {bankNiftyVolumePercent.toFixed(1)}%
-                  </span>
-                )}
-              </div>
-              <div className="index-stats">
-                <div className="stat">
-                  <span>{formatLargeNumber(indices.bankNifty.totalTradedVolume || 0)}</span>
-                  <small>Vol</small>
-                </div>
-                <div className="stat">
-                  <span>₹{formatLargeNumber(indices.bankNifty.totalTradedValue || 0)}</span>
-                  <small>Val</small>
-                </div>
-              </div>
-            </div>
-          </div>
+          <h3>Market Volume</h3>
+          <div className="loading-indicator">Loading...</div>
         </div>
       </div>
     );
-  };
+  }
 
-  // Stock details component with exact API format
-  const StockDetails = ({ stock }) => {
-    if (!stock) return null;
-
-    return (
-      <div className="stock-details">
-        <div className="stock-header">
-          <h2>{stock.symbol}</h2>
-          <div className="company-info">
-            <span className="identifier">{stock.identifier || 'N/A'}</span>
+  return (
+    <div className={`volume-card ${!hasValidData ? 'error' : ''}`}>
+      <div className="volume-header">
+        <div className="header-left">
+          <h3>Market Volume</h3>
+          <div className="volume-timestamp">
+            {hasValidData ? (
+              <>
+                <span className="dot"></span>
+                Live Update
+              </>
+            ) : (
+              <span className="error-text">Data Unavailable</span>
+            )}
           </div>
         </div>
-
-        <div className="price-section">
-          <div className="current-price">
-            <span className="price">₹{formatNumber(stock.lastPrice)}</span>
-            <span className={`change ${getValueClass(stock.change)}`}>
-              {formatChange(stock.change)} ({formatPChange(stock.pChange)})
-            </span>
-          </div>
-          <div className="last-update">
-            Last Updated: {stock.lastUpdateTime || 'N/A'}
-          </div>
-        </div>
-
-        <div className="metrics-grid">
-          <div className="metric-section">
-            <h3>Today's Trading</h3>
-            <div className="metric-row">
-              <div className="metric">
-                <span className="label">Open</span>
-                <span className="value">₹{formatNumber(stock.open)}</span>
-              </div>
-              <div className="metric">
-                <span className="label">High</span>
-                <span className="value">₹{formatNumber(stock.dayHigh)}</span>
-              </div>
-              <div className="metric">
-                <span className="label">Low</span>
-                <span className="value">₹{formatNumber(stock.dayLow)}</span>
-              </div>
-              <div className="metric">
-                <span className="label">Prev Close</span>
-                <span className="value">₹{formatNumber(stock.previousClose)}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="metric-section">
-            <h3>52 Week Range</h3>
-            <div className="metric-row">
-              <div className="metric">
-                <span className="label">52W High</span>
-                <span className="value">₹{formatNumber(stock.yearHigh)}</span>
-              </div>
-              <div className="metric">
-                <span className="label">52W Low</span>
-                <span className="value">₹{formatNumber(stock.yearLow)}</span>
-              </div>
-              <div className="metric">
-                <span className="label">Near 52W High</span>
-                <span className="value">{formatPChange(stock.nearWKH)}%</span>
-              </div>
-              <div className="metric">
-                <span className="label">Near 52W Low</span>
-                <span className="value">{formatPChange(stock.nearWKL)}%</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="metric-section">
-            <h3>Trading Information</h3>
-            <div className="metric-row">
-              <div className="metric">
-                <span className="label">Volume</span>
-                <span className="value">{formatVolume(stock.totalTradedVolume)}</span>
-              </div>
-              <div className="metric">
-                <span className="label">Value</span>
-                <span className="value">₹{formatCrValue(stock.totalTradedValue)}</span>
-              </div>
-              <div className="metric">
-                <span className="label">30D Change</span>
-                <span className={`value ${getValueClass(stock.perChange30d)}`}>
-                  {formatPChange(stock.perChange30d)}%
-                </span>
-              </div>
-              <div className="metric">
-                <span className="label">1Y Change</span>
-                <span className={`value ${getValueClass(stock.perChange365d)}`}>
-                  {formatPChange(stock.perChange365d)}%
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="metric-section">
-            <h3>Historical Dates</h3>
-            <div className="metric-row">
-              <div className="metric">
-                <span className="label">30D Ago Date</span>
-                <span className="value">{stock.date30dAgo}</span>
-              </div>
-              <div className="metric">
-                <span className="label">365D Ago Date</span>
-                <span className="value">{stock.date365dAgo}</span>
-              </div>
-              <div className="metric">
-                <span className="label">Market Cap</span>
-                <span className="value">₹{formatCrValue(stock.ffmc)}</span>
-              </div>
-              <div className="metric">
-                <span className="label">Priority</span>
-                <span className="value">{stock.priority}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {stock.chartTodayPath && (
-          <div className="charts-section">
-            <h3>Price Charts</h3>
-            <div className="chart-links">
-              <a href={stock.chartTodayPath} target="_blank" rel="noopener noreferrer">Intraday Chart</a>
-              <a href={stock.chart30dPath} target="_blank" rel="noopener noreferrer">30 Days Chart</a>
-              <a href={stock.chart365dPath} target="_blank" rel="noopener noreferrer">1 Year Chart</a>
+        {hasValidData && (
+          <div className="header-right">
+            <div className={`volume-change ${volumeChangeClass}`}>
+              <span className="change-icon">{volumeChange >= 0 ? '↑' : '↓'}</span>
+              {Math.abs(volumeChange).toFixed(2)}%
             </div>
           </div>
         )}
       </div>
-    );
-  };
 
-  // Additional formatting functions
-  const formatCrValue = (value) => {
-    if (!value) return '0';
-    const crValue = value / 10000000;
-    return `${crValue.toLocaleString(undefined, { maximumFractionDigits: 2 })} Cr`;
-  };
+      <div className="volume-grid">
+        <div className="volume-stats">
+          <div className="stat-item">
+            <div className="stat-value">
+              {formatLargeNumber(totalVolume)}
+              <span className="stat-unit">shares</span>
+            </div>
+            <div className="stat-label">Total Volume</div>
+          </div>
+          <div className="stat-item">
+            <div className="stat-value">
+              ₹{formatLargeNumber(totalValue)}
+              <span className="stat-unit">turnover</span>
+            </div>
+            <div className="stat-label">Total Value</div>
+          </div>
+        </div>
 
+        <div className="volume-details">
+          {renderIndexDetails(nifty50, 'NIFTY 50')}
+          {renderIndexDetails(bankNifty, 'BANK NIFTY')}
+        </div>
+      </div>
+    </div>
+  );
+};
   const IndexCard = ({ index, title, marketStatus }) => {
     const getValueClass = (value) => value >= 0 ? 'positive' : 'negative';
 
@@ -1288,7 +1114,7 @@ const StockTable = () => {
                         <span className="stock-price">₹{formatNumber(stock.lastPrice)}</span>
                       </div>
                       <div className="stock-change positive">
-                        <span>+{formatPChange(stock.pChange)}</span>
+                        <span>{formatPChange(stock.pChange)}</span>
                         <span className="change-value">{formatChange(stock.change)}</span>
                       </div>
                     </div>
@@ -1437,19 +1263,19 @@ const StockTable = () => {
                       </div>
                       <div className="stat-item">
                         <span className="stat-label">High</span>
-                        <span className="stat-value">₹{formatNumber(selectedStockDetails.high)}</span>
+                        <span className="stat-value">₹{formatNumber(selectedStockDetails.dayHigh)}</span>
                       </div>
                       <div className="stat-item">
                         <span className="stat-label">Low</span>
-                        <span className="stat-value">₹{formatNumber(selectedStockDetails.low)}</span>
+                        <span className="stat-value">₹{formatNumber(selectedStockDetails.dayLow)}</span>
                       </div>
                       <div className="stat-item">
                         <span className="stat-label">Prev Close</span>
-                        <span className="stat-value">₹{formatNumber(selectedStockDetails.preClose)}</span>
+                        <span className="stat-value">₹{formatNumber(selectedStockDetails.previousClose)}</span>
                       </div>
                       <div className="stat-item">
                         <span className="stat-label">Volume</span>
-                        <span className="stat-value">{formatVolume(selectedStockDetails.volume)}</span>
+                        <span className="stat-value">{formatVolume(selectedStockDetails.totalTradedVolume)}</span>
                       </div>
                     </>
                   )}
@@ -1475,9 +1301,6 @@ const StockTable = () => {
                   </div>
                 )}
               </div>
-              {selectedStockDetails && (
-                <StockDetails stock={selectedStockDetails} />
-              )}
             </div>
           )}
         </div>
