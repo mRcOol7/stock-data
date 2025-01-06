@@ -316,6 +316,9 @@ app.get('/api/indices', async (req, res) => {
                 yearLow: 0,
                 totalTradedVolume: 0,
                 totalTradedValue: 0,
+                previousDayVolume: 0,
+                lowerCircuit: 0,
+                upperCircuit: 0,
                 lastUpdateTime: new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })
             },
             bankNifty: bankNiftyData?.data?.[0] || {
@@ -331,6 +334,9 @@ app.get('/api/indices', async (req, res) => {
                 yearLow: 0,
                 totalTradedVolume: 0,
                 totalTradedValue: 0,
+                previousDayVolume: 0,
+                lowerCircuit: 0,
+                upperCircuit: 0,
                 lastUpdateTime: new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })
             },
             performance: {
@@ -338,6 +344,17 @@ app.get('/api/indices', async (req, res) => {
                 cached: !!(dataCache.nifty50.data && dataCache.bankNifty.data)
             }
         };
+
+        // Add previous day volume data
+        if (nifty50Data?.data?.[0]) {
+            indices.nifty50.previousDayVolume = nifty50Data.data[0].previousDayVolume || 
+                Math.floor(nifty50Data.data[0].totalTradedVolume * 0.9); // Estimate if not available
+        }
+        if (bankNiftyData?.data?.[0]) {
+            indices.bankNifty.previousDayVolume = bankNiftyData.data[0].previousDayVolume || 
+                Math.floor(bankNiftyData.data[0].totalTradedVolume * 0.9); // Estimate if not available
+        }
+        
 
         res.json(indices);
     } catch (error) {
