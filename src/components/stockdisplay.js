@@ -1,14 +1,16 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import config from '../config';
 import "./stocktable.css";
 import ReactApexChart from "react-apexcharts";
 
 const StockTable = () => {
+  // State declarations
   const [stocks, setStocks] = useState([]);
   const [currentPage, setCurrentPage] = useState(1); 
   const [itemsPerPage] = useState(10); 
-  const [loading, setLoading] = useState(true); 
+  const [loading, setLoading] = useState(false); 
+  const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState({
     priceRange: 'all',
@@ -20,10 +22,184 @@ const StockTable = () => {
     sortColumn: 'symbol',
     sortDirection: 'asc'
   });
-  
-  // Logo cache for frontend
+  const [niftyStocks, setNiftyStocks] = useState({ data: [], totalStocks: 0 });
+  const [bankNiftyStocks, setBankNiftyStocks] = useState({ data: [], totalStocks: 0 });
+  const [marketStatus, setMarketStatus] = useState({
+    status: 'Open',
+    message: "Market is Open",
+    topGainers: [],
+    topLosers: [],
+    totalVolume: 0,
+    lastUpdated: new Date().toLocaleString(),
+    topVolume: [],
+    avgPrice: 0,
+    totalStocks: 0
+  });
+  const [selectedStock, setSelectedStock] = useState(null);
+  const [selectedStockDetails, setSelectedStockDetails] = useState(null);
+  const [chartLoading, setChartLoading] = useState(false);
   const [logoCache, setLogoCache] = useState(new Map());
+  const [candleData, setCandleData] = useState([]);
+  const [chartOptions, setChartOptions] = useState({
+    chart: {
+      type: 'candlestick',
+      height: 500,
+      background: '#1a1a1a',
+      foreColor: '#999',
+      zoom: {
+        enabled: true,
+        type: 'x',
+        autoScaleYaxis: true
+      },
+      toolbar: {
+        show: true,
+        tools: {
+          download: true,
+          selection: true,
+          zoom: true,
+          zoomin: true,
+          zoomout: true,
+          pan: true,
+          reset: true
+        }
+      }
+    },
+    plotOptions: {
+      candlestick: {
+        colors: {
+          upward: '#26a69a',
+          downward: '#ef5350'
+        },
+        wick: {
+          useFillColor: true,
+        }
+      }
+    },
+    xaxis: {
+      type: 'datetime',
+      labels: {
+        style: {
+          colors: '#999'
+        }
+      },
+      axisBorder: {
+        show: true,
+        color: '#333'
+      }
+    },
+    yaxis: {
+      tooltip: {
+        enabled: true
+      },
+      labels: {
+        style: {
+          colors: '#999'
+        },
+        formatter: function (value) {
+          return '₹' + value.toFixed(2);
+        }
+      },
+      axisBorder: {
+        show: true,
+        color: '#333'
+      }
+    },
+    grid: {
+      show: true,
+      borderColor: '#1f1f1f',
+      strokeDashArray: 0,
+      position: 'back',
+      xaxis: {
+        lines: {
+          show: true
+        }
+      },
+      yaxis: {
+        lines: {
+          show: true
+        }
+      }
+    },
+    tooltip: {
+      enabled: true,
+      theme: 'dark',
+      style: {
+        fontSize: '12px',
+        fontFamily: 'system-ui'
+      },
+      x: {
+        format: 'dd MMM yyyy'
+      },
+      y: {
+        formatter: function(value) {
+          return '₹' + value.toFixed(2);
+        }
+      }
+    },
+    annotations: {
+      yaxis: [{
+        y: selectedStockDetails?.dayHigh,
+        borderColor: '#26a69a',
+        label: {
+          text: 'Day High',
+          style: {
+            color: '#fff',
+            background: '#26a69a'
+          }
+        }
+      }, {
+        y: selectedStockDetails?.dayLow,
+        borderColor: '#ef5350',
+        label: {
+          text: 'Day Low',
+          style: {
+            color: '#fff',
+            background: '#ef5350'
+          }
+        }
+      }]
+    }
+  });
+  const [indices, setIndices] = useState({
+    nifty50: {
+      symbol: 'NIFTY 50',
+      lastPrice: 0,
+      change: 0,
+      pChange: 0,
+      open: 0,
+      dayHigh: 0,
+      dayLow: 0,
+      previousClose: 0,
+      yearHigh: 0,
+      yearLow: 0,
+      totalTradedVolume: 0,
+      totalTradedValue: 0,
+      lastUpdateTime: '',
+      previousDayVolume: 0
+    },
+    bankNifty: {
+      symbol: 'NIFTY BANK',
+      lastPrice: 0,
+      change: 0,
+      pChange: 0,
+      open: 0,
+      dayHigh: 0,
+      dayLow: 0,
+      previousClose: 0,
+      yearHigh: 0,
+      yearLow: 0,
+      totalTradedVolume: 0,
+      totalTradedValue: 0,
+      lastUpdateTime: '',
+      previousDayVolume: 0
+    },
+    marketStatus: {
+      status: 'Open',
+      message: "Market is Open"
+    }
+  });
 
+  // Logo cache for frontend
   // Calculate pagination indices
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
@@ -197,169 +373,7 @@ const StockTable = () => {
     };
 
     fetchAllLogos();
-  }, [stocks]);
-
-  const [marketStatus, setMarketStatus] = useState({
-    status: 'Open',
-    message: "Market is Open",
-    topGainers: [],
-    topLosers: [],
-    totalVolume: 0,
-    lastUpdated: new Date().toLocaleString(),
-    topVolume: [],
-    avgPrice: 0,
-    totalStocks: 0
-  });
-  const [niftyData, setNiftyData] = useState({
-    index: 'NIFTY 50',
-    last: 0,
-    change: 0,
-    percentChange: 0,
-    open: 0,
-    high: 0,
-    low: 0,
-    previousClose: 0,
-    upperCircuit: 0,
-    lowerCircuit: 0,
-    lastUpdated: new Date().toLocaleString()
-  });
-  const [bankNiftyData, setBankNiftyData] = useState({
-    index: 'NIFTY BANK',
-    last: 0,
-    change: 0,
-    percentChange: 0,
-    open: 0,
-    high: 0,
-    low: 0,
-    previousClose: 0,
-    lastUpdated: new Date().toLocaleString()
-  });
-  const [niftyStocks, setNiftyStocks] = useState([]);
-  const [bankNiftyStocks, setBankNiftyStocks] = useState([]);
-  const [selectedStock, setSelectedStock] = useState(null);
-  const [selectedStockDetails, setSelectedStockDetails] = useState(null);
-  const [chartLoading, setChartLoading] = useState(false);
-  const [candleData, setCandleData] = useState([]);
-  const [chartOptions, setChartOptions] = useState({
-    chart: {
-      type: 'candlestick',
-      height: 500,
-      background: '#1a1a1a',
-      foreColor: '#999',
-      zoom: {
-        enabled: true,
-        type: 'x',
-        autoScaleYaxis: true
-      },
-      toolbar: {
-        show: true,
-        tools: {
-          download: true,
-          selection: true,
-          zoom: true,
-          zoomin: true,
-          zoomout: true,
-          pan: true,
-          reset: true
-        }
-      }
-    },
-    plotOptions: {
-      candlestick: {
-        colors: {
-          upward: '#26a69a',
-          downward: '#ef5350'
-        },
-        wick: {
-          useFillColor: true,
-        }
-      }
-    },
-    xaxis: {
-      type: 'datetime',
-      labels: {
-        style: {
-          colors: '#999'
-        }
-      },
-      axisBorder: {
-        show: true,
-        color: '#333'
-      }
-    },
-    yaxis: {
-      tooltip: {
-        enabled: true
-      },
-      labels: {
-        style: {
-          colors: '#999'
-        },
-        formatter: function (value) {
-          return '₹' + value.toFixed(2);
-        }
-      },
-      axisBorder: {
-        show: true,
-        color: '#333'
-      }
-    },
-    grid: {
-      show: true,
-      borderColor: '#1f1f1f',
-      strokeDashArray: 0,
-      position: 'back',
-      xaxis: {
-        lines: {
-          show: true
-        }
-      },
-      yaxis: {
-        lines: {
-          show: true
-        }
-      }
-    },
-    tooltip: {
-      enabled: true,
-      theme: 'dark',
-      style: {
-        fontSize: '12px',
-        fontFamily: 'system-ui'
-      },
-      x: {
-        format: 'dd MMM yyyy'
-      },
-      y: {
-        formatter: function(value) {
-          return '₹' + value.toFixed(2);
-        }
-      }
-    },
-    annotations: {
-      yaxis: [{
-        y: selectedStockDetails?.dayHigh,
-        borderColor: '#26a69a',
-        label: {
-          text: 'Day High',
-          style: {
-            color: '#fff',
-            background: '#26a69a'
-          }
-        }
-      }, {
-        y: selectedStockDetails?.dayLow,
-        borderColor: '#ef5350',
-        label: {
-          text: 'Day Low',
-          style: {
-            color: '#fff',
-            background: '#ef5350'
-          }
-        }
-      }]
-    }
-  });
+  }, [stocks, logoCache]);
 
   const handleImageError = (e) => {
     e.target.src = '/default-stock.png';
@@ -450,16 +464,17 @@ const StockTable = () => {
 
   // Update market stats when stocks change
   useEffect(() => {
-    const allStocks = [...niftyStocks, ...bankNiftyStocks];
-    const stats = calculateMarketStats(allStocks);
-    if (stats) {
-      setMarketStatus(prevStatus => ({
-        ...prevStatus,
-        ...stats
-      }));
+    if (niftyStocks.data && bankNiftyStocks.data) {
+      const allStocks = [...niftyStocks.data, ...bankNiftyStocks.data];
+      const stats = calculateMarketStats(allStocks);
+      if (stats) {
+        setMarketStatus(prevStatus => ({
+          ...prevStatus,
+          ...stats
+        }));
+      }
     }
-  }, [niftyStocks, bankNiftyStocks]);
-
+  }, [niftyStocks.data, bankNiftyStocks.data]);
 
   const handleSort = (column) => {
     setFilters(prevFilters => ({
@@ -469,99 +484,64 @@ const StockTable = () => {
     }));
   };
 
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async (showLoading = false) => {
     try {
-      setLoading(true);
-      const startTime = performance.now();
+      if (showLoading) {
+        setLoading(true);
+      }
+      setError(null); // Clear any previous errors
 
       // Fetch NIFTY data
       const niftyResponse = await axios.get(`${config.apiBaseUrl}/api/nifty`);
-      const niftyData = await niftyResponse.data;
-      console.log('NIFTY API Response:', {
-        timestamp: new Date().toLocaleTimeString(),
-        totalStocks: niftyData.length,
-        data: niftyData
+      const niftyData = niftyResponse.data;
+      setNiftyStocks({
+        data: niftyData,
+        totalStocks: niftyData.length
       });
-      setNiftyData(niftyData);
 
       // Fetch BANKNIFTY data
       const bankNiftyResponse = await axios.get(`${config.apiBaseUrl}/api/banknifty`);
-      const bankNiftyData = await bankNiftyResponse.data;
-      console.log('BANKNIFTY API Response:', {
-        timestamp: new Date().toLocaleTimeString(),
-        totalStocks: bankNiftyData.length,
-        data: bankNiftyData
+      const bankNiftyData = bankNiftyResponse.data;
+      setBankNiftyStocks({
+        data: bankNiftyData,
+        totalStocks: bankNiftyData.length
       });
-      setBankNiftyData(bankNiftyData);
 
       // Process and combine the data
       const processedStocks = processStockData(niftyData, bankNiftyData);
-
-      // Update states
       setStocks(processedStocks);
-      setNiftyStocks(niftyData);
-      setBankNiftyStocks(bankNiftyData);
 
-      // Log performance metrics
-      console.log('API Performance:', {
-        timestamp: new Date().toLocaleTimeString(),
-        totalFetchTime: `${(performance.now() - startTime).toFixed(2)}ms`,
-        totalStocksFetched: processedStocks.length,
-        niftyStocks: niftyData.length,
-        bankNiftyStocks: bankNiftyData.length
-      });
+      // Update market status directly from processed data
+      const stats = calculateMarketStats(processedStocks);
+      if (stats) {
+        setMarketStatus(prevStatus => ({
+          ...prevStatus,
+          ...stats,
+          lastUpdated: new Date().toLocaleString()
+        }));
+      }
 
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     } catch (error) {
-      console.error('API Error:', {
-        timestamp: new Date().toLocaleTimeString(),
-        error: error.message,
-        stack: error.stack,
-        endpoint: error.config?.url || 'Unknown endpoint'
-      });
-      setLoading(false);
+      console.error('Error fetching data:', error);
+      setError('Failed to fetch stock data. Please try again later.');
+      if (showLoading) {
+        setLoading(false);
+      }
     }
-  };
+  }, []);
 
-  const [indices, setIndices] = useState({
-    nifty50: {
-      symbol: 'NIFTY 50',
-      lastPrice: 0,
-      change: 0,
-      pChange: 0,
-      open: 0,
-      dayHigh: 0,
-      dayLow: 0,
-      previousClose: 0,
-      yearHigh: 0,
-      yearLow: 0,
-      totalTradedVolume: 0,
-      totalTradedValue: 0,
-      lastUpdateTime: '',
-      previousDayVolume: 0
-    },
-    bankNifty: {
-      symbol: 'NIFTY BANK',
-      lastPrice: 0,
-      change: 0,
-      pChange: 0,
-      open: 0,
-      dayHigh: 0,
-      dayLow: 0,
-      previousClose: 0,
-      yearHigh: 0,
-      yearLow: 0,
-      totalTradedVolume: 0,
-      totalTradedValue: 0,
-      lastUpdateTime: '',
-      previousDayVolume: 0
-    },
-    marketStatus: {
-      status: 'Open',
-      message: "Market is Open"
-    }
-  });
+  useEffect(() => {
+    // Initial load with loading state
+    fetchData(true);
+
+    // Auto refresh every 5 seconds without loading state
+    const dataInterval = setInterval(() => fetchData(false), 5000);
+  
+    return () => clearInterval(dataInterval);
+  }, [fetchData]);
 
   const fetchIndices = async () => {
     try {
@@ -580,10 +560,7 @@ const StockTable = () => {
     };
 
     fetchAllData();
-    const dataInterval = setInterval(fetchAllData, 60000);
-  
-    return () => clearInterval(dataInterval);
-  }, []);
+  }, [fetchData]);
 
   const handleRowClick = async (stock) => {
     setSelectedStock(stock.symbol);
@@ -997,6 +974,10 @@ if (loading) {
   return <div className="loading">Loading...</div>;
 }
 
+if (error) {
+  return <div className="error">{error}</div>;
+}
+
 if (!stocks || stocks.length === 0) {
   return <div>No stocks data available</div>;
 }
@@ -1015,13 +996,6 @@ const formatLargeNumber = (number) => {
 
   const { suffix, threshold } = suffixes.find(({ threshold }) => absNum >= threshold) || {};
   return suffix ? `${(number / threshold).toFixed(2)}${suffix}` : number.toFixed(2);
-};
-
-// Format value in Crores (Cr)
-const formatCrValue = (value) => {
-  if (!value) return '0';
-  const crValue = value / 1e7; // Convert to Crores
-  return `${crValue.toLocaleString(undefined, { maximumFractionDigits: 2 })} Cr`;
 };
 
 // VolumeCard component to display market volume and value
@@ -1143,7 +1117,9 @@ const VolumeCard = ({ indices }) => {
           <span className="current">₹{formatNumber(index.lastPrice)}</span>
           <div className="change-container">
             <span className="change">{formatChange(index.change)}</span>
-            <span className="percent">({formatPChange(index.pChange)}%)</span>
+            <span className={`price-change ${getValueClass(index.pChange)}`}>
+              {formatChange(index.pChange)} ({formatPChange(index.pChange)})
+            </span>
           </div>
         </div>
         <div className="index-details">
@@ -1283,7 +1259,7 @@ const VolumeCard = ({ indices }) => {
                 >
                   <option value="all">All Indices</option>
                   <option value="NIFTY 50">Nifty 50</option>
-                  <option value="NIFTY BANK">Bank Nifty</option>
+                  <option value="BANKNIFTY">Bank Nifty</option>
                 </select>
 
                 <select
