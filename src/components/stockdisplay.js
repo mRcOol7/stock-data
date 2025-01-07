@@ -20,6 +20,185 @@ const StockTable = () => {
     sortColumn: 'symbol',
     sortDirection: 'asc'
   });
+  
+  // Logo cache for frontend
+  const [logoCache, setLogoCache] = useState(new Map());
+
+  // Calculate pagination indices
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+
+  // Filter stocks
+  const filteredStocks = stocks.filter(stock => {
+    const matchesSearch = stock.symbol.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    let matchesPriceRange = true;
+    if (filters.priceRange !== 'all') {
+      const price = stock.lastPrice;
+      switch (filters.priceRange) {
+        case 'under100':
+          matchesPriceRange = price < 100;
+          break;
+        case '100to500':
+          matchesPriceRange = price >= 100 && price <= 500;
+          break;
+        case '500to1000':
+          matchesPriceRange = price > 500 && price <= 1000;
+          break;
+        case 'above1000':
+          matchesPriceRange = price > 1000;
+          break;
+        default:
+          matchesPriceRange = true;
+      }
+    }
+
+    let matchesChangeType = true;
+    if (filters.changeType !== 'all') {
+      switch (filters.changeType) {
+        case 'gainers':
+          matchesChangeType = stock.pChange > 0;
+          break;
+        case 'losers':
+          matchesChangeType = stock.pChange < 0;
+          break;
+        default:
+          matchesChangeType = true;
+      }
+    }
+
+    let matchesVolumeRange = true;
+    if (filters.volumeRange !== 'all') {
+      const volume = stock.totalTradedVolume;
+      switch (filters.volumeRange) {
+        case 'high':
+          matchesVolumeRange = volume > 1000000;
+          break;
+        case 'low':
+          matchesVolumeRange = volume <= 1000000;
+          break;
+        default:
+          matchesVolumeRange = true;
+      }
+    }
+
+    let matchesIndex = true;
+    if (filters.indexFilter !== 'all') {
+      matchesIndex = stock.indices.includes(filters.indexFilter);
+    }
+
+    return matchesSearch && matchesPriceRange && matchesChangeType && matchesVolumeRange && matchesIndex;
+  }).sort((a, b) => {
+    const { sortColumn, sortDirection } = filters;
+    let aValue = a[sortColumn];
+    let bValue = b[sortColumn];
+    
+    // Handle numeric values
+    if (typeof aValue === 'number' && typeof bValue === 'number') {
+      return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
+    }
+    
+    // Handle string values
+    aValue = String(aValue).toLowerCase();
+    bValue = String(bValue).toLowerCase();
+    
+    if (sortDirection === 'asc') {
+      return aValue.localeCompare(bValue);
+    } else {
+      return bValue.localeCompare(aValue);
+    }
+  });
+
+  // Get current page stocks
+  const currentStocks = filteredStocks.slice(indexOfFirstItem, indexOfLastItem);
+
+  // Logo fetching effect for all stocks
+  const getLogoSymbol = (symbol) => {
+    // Remove .NS suffix if present
+    const baseSymbol = symbol.split('.')[0];
+    
+    // Special cases for company logos
+    const specialCases = {
+      'PVRINOX': 'PVR',
+      'TATAMOTORS': 'TATA MOTORS',
+      'TCS': 'TCS',
+      'HDFCBANK': 'HDFC BANK',
+      'ICICIBANK': 'ICICI BANK',
+      'SBIN': 'STATE BANK OF INDIA',
+      'MARUTI': 'MARUTI SUZUKI',
+      'HINDUNILVR': 'HINDUSTAN UNILEVER',
+      'ULTRACEMCO': 'ULTRATECH CEMENT',
+      'ASIANPAINT': 'ASIAN PAINTS',
+      'TATATECH':'TTML',
+      'BAJFINANCE': 'BAJAJ FINANCE',
+      'BAJAJFINSV': 'BAJAJ FINSERV',
+      'ADANIENSOL':'ADANIENT',
+      'HCLTECH': 'HCLTECH',
+      'GODREJ':'GODREJCP',
+      'INDUSINDBK': 'INDUSIND BANK',
+      'KOTAKBANK': 'KOTAK MAHINDRA BANK',
+      'M&M': 'M&M',
+      'NTPC': 'NATIONAL THERMAL POWER CORPORATION',
+      'ONGC': 'OIL AND NATURAL GAS CORPORATION',
+      'SUNPHARMA': 'SUN PHARMACEUTICAL',
+      'TECHM': 'TECH MAHINDRA',
+      'WIPRO': 'WIT',
+      'IOC':'IOC',
+      'BHARTIARTL': 'BHARTI AIRTEL',
+      'RELIANCE': 'RELIANCE INDUSTRIES',
+      'ITC': 'ITC',
+      'LT': 'LT',
+      'LTBO':'LTI',
+      'AXISBANK': 'AXIS BANK',
+      'ZOMATO': 'ZOMATO',
+      'PAYTM': 'Paytm',
+      'NYKAA': 'NYKAA',
+      'PTCIL':'PTC',
+      'POLICYBZR': 'POLICYBZR',
+      'DMART': 'DMart',  // Updated to match the actual logo name
+      'AVENUE': 'AVENUE SUPERMARTS'
+    };
+    
+    return specialCases[baseSymbol] || baseSymbol;
+  };
+
+  useEffect(() => {
+    const fetchAllLogos = async () => {
+      if (!stocks?.length) return;
+      
+      const unfetchedStocks = stocks.filter(stock => !logoCache.has(getLogoSymbol(stock.symbol)));
+      if (unfetchedStocks.length === 0) return;
+
+      try {
+        const promises = unfetchedStocks.map(stock => 
+          axios.get(`${config.apiBaseUrl}/api/stock/logo/${encodeURIComponent(getLogoSymbol(stock.symbol))}`)
+            .then(response => ({ 
+              symbol: stock.symbol,
+              url: response.data.url 
+            }))
+            .catch(error => {
+              console.error(`Error fetching logo for ${stock.symbol}:`, error);
+              return { symbol: stock.symbol, url: null };
+            })
+        );
+
+        const results = await Promise.all(promises);
+        
+        setLogoCache(prev => {
+          const newCache = new Map(prev);
+          results.forEach(({ symbol, url }) => {
+            newCache.set(getLogoSymbol(symbol), url);
+          });
+          return newCache;
+        });
+      } catch (error) {
+        console.error('Error fetching logos:', error);
+      }
+    };
+
+    fetchAllLogos();
+  }, [stocks]);
+
   const [marketStatus, setMarketStatus] = useState({
     status: 'Open',
     message: "Market is Open",
@@ -182,6 +361,11 @@ const StockTable = () => {
     }
   });
 
+  const handleImageError = (e) => {
+    e.target.src = '/default-stock.png';
+    e.target.className = 'stock-icon default-icon';
+  };
+
   // Format functions with null checks
   const formatNumber = (value) => {
     if (value === null || value === undefined) return '0';
@@ -209,86 +393,6 @@ const StockTable = () => {
     if (!value) return '';
     return value > 0 ? 'positive' : value < 0 ? 'negative' : '';
   };
-
-  const filteredStocks = stocks.filter(stock => {
-    const matchesSearch = stock.symbol.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    let matchesPriceRange = true;
-    if (filters.priceRange !== 'all') {
-      const price = stock.lastPrice;
-      switch (filters.priceRange) {
-        case 'under100':
-          matchesPriceRange = price < 100;
-          break;
-        case '100to500':
-          matchesPriceRange = price >= 100 && price <= 500;
-          break;
-        case '500to1000':
-          matchesPriceRange = price > 500 && price <= 1000;
-          break;
-        case 'above1000':
-          matchesPriceRange = price > 1000;
-          break;
-        default:
-          matchesPriceRange = true;
-      }
-    }
-
-    let matchesChangeType = true;
-    if (filters.changeType !== 'all') {
-      switch (filters.changeType) {
-        case 'gainers':
-          matchesChangeType = stock.pChange > 0;
-          break;
-        case 'losers':
-          matchesChangeType = stock.pChange < 0;
-          break;
-        default:
-          matchesChangeType = true;
-      }
-    }
-
-    let matchesVolumeRange = true;
-    if (filters.volumeRange !== 'all') {
-      const volume = stock.totalTradedVolume;
-      switch (filters.volumeRange) {
-        case 'high':
-          matchesVolumeRange = volume > 1000000;
-          break;
-        case 'low':
-          matchesVolumeRange = volume <= 1000000;
-          break;
-        default:
-          matchesVolumeRange = true;
-      }
-    }
-
-    let matchesIndex = true;
-    if (filters.indexFilter !== 'all') {
-      matchesIndex = stock.indices.includes(filters.indexFilter);
-    }
-
-    return matchesSearch && matchesPriceRange && matchesChangeType && matchesVolumeRange && matchesIndex;
-  }).sort((a, b) => {
-    const { sortColumn, sortDirection } = filters;
-    let aValue = a[sortColumn];
-    let bValue = b[sortColumn];
-    
-    // Handle numeric values
-    if (typeof aValue === 'number' && typeof bValue === 'number') {
-      return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
-    }
-    
-    // Handle string values
-    aValue = String(aValue).toLowerCase();
-    bValue = String(bValue).toLowerCase();
-    
-    if (sortDirection === 'asc') {
-      return aValue.localeCompare(bValue);
-    } else {
-      return bValue.localeCompare(aValue);
-    }
-  });
 
   // Process stock data to include indices information
   const processStockData = (niftyStocks, bankNiftyStocks) => {
@@ -605,9 +709,7 @@ const StockTable = () => {
   }, [selectedStockDetails]);
 
   // Pagination logic for filtered stocks
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = filteredStocks.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(filteredStocks.length / itemsPerPage);
 
   // Reset to first page when search query changes
   useEffect(() => {
@@ -1110,12 +1212,26 @@ const VolumeCard = ({ indices }) => {
                   {marketStatus.topGainers?.map((stock, index) => (
                     <div key={index} className="stats-item">
                       <div className="stock-info">
-                        <span className="stock-symbol">{stock.symbol}</span>
-                        <span className="stock-price">₹{formatNumber(stock.lastPrice)}</span>
-                      </div>
-                      <div className="stock-change positive">
-                        <span>{formatPChange(stock.pChange)}</span>
-                        <span className="change-value">{formatChange(stock.change)}</span>
+                        <div className="stock-header">
+                          {logoCache.has(getLogoSymbol(stock.symbol)) ? (
+                            <img 
+                              src={logoCache.get(getLogoSymbol(stock.symbol))}
+                              alt={`${stock.symbol.split('.')[0]} logo`}
+                              className="stock-icon mini"
+                              onError={handleImageError}
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="stock-icon-placeholder mini" title={stock.symbol.split('.')[0]}>
+                              {stock.symbol.split('.')[0].charAt(0)}
+                            </div>
+                          )}
+                          <span className="stock-name">{stock.symbol.split('.')[0]}</span>
+                        </div>
+                        <div className="stock-price">
+                          <span>₹{formatNumber(stock.lastPrice)}</span>
+                          <span className="positive">+{stock.pChange.toFixed(2)}%</span>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -1128,12 +1244,26 @@ const VolumeCard = ({ indices }) => {
                   {marketStatus.topLosers?.map((stock, index) => (
                     <div key={index} className="stats-item">
                       <div className="stock-info">
-                        <span className="stock-symbol">{stock.symbol}</span>
-                        <span className="stock-price">₹{formatNumber(stock.lastPrice)}</span>
-                      </div>
-                      <div className="stock-change negative">
-                        <span>{formatPChange(stock.pChange)}</span>
-                        <span className="change-value">{formatChange(stock.change)}</span>
+                        <div className="stock-header">
+                          {logoCache.has(getLogoSymbol(stock.symbol)) ? (
+                            <img 
+                              src={logoCache.get(getLogoSymbol(stock.symbol))}
+                              alt={`${stock.symbol.split('.')[0]} logo`}
+                              className="stock-icon mini"
+                              onError={handleImageError}
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="stock-icon-placeholder mini" title={stock.symbol.split('.')[0]}>
+                              {stock.symbol.split('.')[0].charAt(0)}
+                            </div>
+                          )}
+                          <span className="stock-name">{stock.symbol.split('.')[0]}</span>
+                        </div>
+                        <div className="stock-price">
+                          <span>₹{formatNumber(stock.lastPrice)}</span>
+                          <span className="negative">{stock.pChange.toFixed(2)}%</span>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -1179,11 +1309,13 @@ const VolumeCard = ({ indices }) => {
               </div>
             </div>
 
-            <div className="stock-table">
-              <table>
+            <div className="table-container">
+              <table className="stock-table">
                 <thead>
                   <tr>
-                    <th onClick={() => handleSort('symbol')}>Symbol</th>
+                    <th onClick={() => handleSort('symbol')}>
+                      Symbol
+                    </th>
                     <th onClick={() => handleSort('lastPrice')}>Price</th>
                     <th onClick={() => handleSort('change')}>Change</th>
                     <th onClick={() => handleSort('pChange')}>% Change</th>
@@ -1197,13 +1329,30 @@ const VolumeCard = ({ indices }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {currentItems.map((stock, index) => (
+                  {currentStocks.map((stock, index) => (
                     <tr 
                       key={index}
                       className={getValueClass(stock.change)}
                       onClick={() => handleRowClick(stock)}
                     >
-                      <td>{stock.symbol}</td>
+                      <td className="symbol-cell">
+                        <div className="symbol-container">
+                          {logoCache.has(getLogoSymbol(stock.symbol)) ? (
+                            <img 
+                              src={logoCache.get(getLogoSymbol(stock.symbol))}
+                              alt={`${stock.symbol.split('.')[0]} logo`}
+                              className="stock-icon"
+                              onError={handleImageError}
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="stock-icon-placeholder" title={stock.symbol.split('.')[0]}>
+                              {stock.symbol.split('.')[0].charAt(0)}
+                            </div>
+                          )}
+                          <span className="stock-symbol">{stock.symbol.split('.')[0]}</span>
+                        </div>
+                      </td>
                       <td>₹{formatNumber(stock.lastPrice)}</td>
                       <td className={getValueClass(stock.change)}>
                         {formatChange(stock.change)}
@@ -1229,7 +1378,7 @@ const VolumeCard = ({ indices }) => {
         {/* Pagination */}
         <Pagination 
           currentPage={currentPage} 
-          totalPages={Math.ceil(filteredStocks.length / itemsPerPage)} 
+          totalPages={totalPages} 
           onPageChange={paginate} 
         />
 
