@@ -366,6 +366,102 @@ app.get('/api/indices', async (req, res) => {
     }
 });
 
+// Function to generate SVG logo for a stock
+function generateStockLogoSVG(symbol) {
+    // Get first two characters from the symbol
+    const chars = symbol.slice(0, 2).toUpperCase();
+    
+    // Generate a consistent color based on the symbol
+    const hue = (symbol.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 360);
+    const backgroundColor = `hsl(${hue}, 60%, 45%)`;
+    
+    // Create SVG with the characters
+    const svg = `
+    <svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <rect width="200" height="200" fill="${backgroundColor}" rx="30"/>
+        <text x="100" y="120" font-family="Arial, sans-serif" font-size="80" font-weight="bold" 
+              fill="white" text-anchor="middle">${chars}</text>
+    </svg>`;
+    
+    // Convert SVG to base64 for URL
+    const base64 = Buffer.from(svg).toString('base64');
+    return `data:image/svg+xml;base64,${base64}`;
+}
+
+// Stock logo cache
+const logoCache = new Map();
+
+// Function to fetch stock logo
+async function getStockLogo(symbol) {
+    try {
+        // Remove any indices from symbol (like .NS)
+        const cleanSymbol = symbol.split('.')[0];
+        
+        // Check cache first
+        if (logoCache.has(cleanSymbol)) {
+            return logoCache.get(cleanSymbol);
+        }
+
+        // Add .NS to make it match the API response format
+        const searchSymbol = `${cleanSymbol}.NS`;
+        
+        const response = await axios.get(`https://api.api-ninjas.com/v1/logo?ticker=${encodeURIComponent(searchSymbol)}`, {
+            headers: {
+                'X-Api-Key': 'oFjjwHB+0UDpzV6WSkhUlg==lp0IYblgEGDn6JHi',
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (response.data && response.data.length > 0 && response.data[0].image) {
+            const logoUrl = response.data[0].image;
+            logoCache.set(cleanSymbol, logoUrl);
+            return logoUrl;
+        }
+
+        // If no logo found with ticker, try searching by company name
+        const nameResponse = await axios.get(`https://api.api-ninjas.com/v1/logo?name=${encodeURIComponent(cleanSymbol)}`, {
+            headers: {
+                'X-Api-Key': 'oFjjwHB+0UDpzV6WSkhUlg==lp0IYblgEGDn6JHi',
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (nameResponse.data && nameResponse.data.length > 0 && nameResponse.data[0].image) {
+            const logoUrl = nameResponse.data[0].image;
+            logoCache.set(cleanSymbol, logoUrl);
+            return logoUrl;
+        }
+        
+        // If no logo found, generate an SVG logo
+        const svgLogo = generateStockLogoSVG(cleanSymbol);
+        logoCache.set(cleanSymbol, svgLogo);
+        return svgLogo;
+    } catch (error) {
+        console.error(`Error fetching logo for ${symbol}:`, error.message);
+        // On error, generate and return an SVG logo
+        const svgLogo = generateStockLogoSVG(symbol.split('.')[0]);
+        logoCache.set(symbol.split('.')[0], svgLogo);
+        return svgLogo;
+    }
+}
+
+// Endpoint to get stock logo
+app.get('/api/stock/logo/:symbol', async (req, res) => {
+    try {
+        const { symbol } = req.params;
+        const logoUrl = await getStockLogo(symbol);
+        
+        if (!logoUrl) {
+            return res.status(404).json({ error: 'Logo not found' });
+        }
+        
+        res.json({ url: logoUrl });
+    } catch (error) {
+        console.error('Error in logo endpoint:', error);
+        res.status(500).json({ error: 'Failed to fetch logo' });
+    }
+});
+
 // Test endpoint for Vercel deployment
 app.get('/', (req, res) => {
     res.json({ message: 'Hello from Vercel Server!' });
