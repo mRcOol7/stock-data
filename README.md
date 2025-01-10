@@ -163,12 +163,6 @@ The platform supports both light and dark themes with customizable colors:
 
 ---
 
-## 📜 License  
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.  
-
----
-
 <div align="center">  
   Made with ❤️ for traders and developers  
 </div>
